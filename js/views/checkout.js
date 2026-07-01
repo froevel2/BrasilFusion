@@ -316,19 +316,20 @@ export async function checkoutView() {
 
             <!-- Tab Content: Credit Card -->
             <div class="payment-tab-content active" id="pay-card" style="margin-top: 1.5rem;">
-              <div class="checkout-form-grid">
-                <div class="form-group col-span-2">
-                  <label for="card-number">${tCardNumber}</label>
-                  <input type="text" id="card-number" placeholder="0000 0000 0000 0000" maxlength="19">
+              <div id="izipay-loading" class="text-center" style="padding: 1.5rem;">
+                <div style="padding: 1.5rem; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color);">
+                  <i data-lucide="lock" style="width: 24px; height: 24px; margin: 0 auto 0.5rem auto; color: var(--text-muted);"></i>
+                  <p class="text-muted text-sm">${language === 'es' ? 'Completa los datos de envío (Paso 1) para habilitar el pago seguro con tarjeta.' : 'Preencha os dados de envio (Passo 1) para habilitar o pagamento seguro com cartão.'}</p>
                 </div>
-                <div class="form-group">
-                  <label for="card-expiry">${tCardExpiry}</label>
-                  <input type="text" id="card-expiry" placeholder="MM/AA" maxlength="5">
-                </div>
-                <div class="form-group">
-                  <label for="card-cvv">${tCardCvv}</label>
-                  <input type="password" id="card-cvv" placeholder="123" maxlength="4">
-                </div>
+              </div>
+              
+              <!-- Formulario embebido de Izipay (inicialmente oculto) -->
+              <div class="kr-embedded" id="izipay-payment-form" style="display: none; margin: 0 auto; max-width: 400px;">
+                <div class="kr-pan"></div>
+                <div class="kr-expiry"></div>
+                <div class="kr-security-code"></div>
+                <button class="kr-payment-button"></button>
+                <div class="kr-form-error"></div>
               </div>
             </div>
 
@@ -448,6 +449,12 @@ checkoutView.init = function() {
   const tabContents = document.querySelectorAll('.payment-tab-content');
 
   let activeMethod = 'Tarjeta';
+  let isIzipayInitialized = false;
+
+  // By default Tarjeta is active, so hide the default place order button initially
+  if (submitBtn) {
+    submitBtn.style.display = 'none';
+  }
 
   // Payment tabs navigation
   tabBtns.forEach(btn => {
@@ -459,9 +466,15 @@ checkoutView.init = function() {
       const target = btn.getAttribute('data-target');
       document.getElementById(target).classList.add('active');
 
-      if (target === 'pay-card') activeMethod = 'Tarjeta';
-      if (target === 'pay-yape') activeMethod = 'Yape';
-      if (target === 'pay-transfer') activeMethod = 'Transferencia';
+      if (target === 'pay-card') {
+        activeMethod = 'Tarjeta';
+        if (submitBtn) submitBtn.style.display = 'none';
+        verificarHabilitacionPago();
+      } else {
+        if (submitBtn) submitBtn.style.display = 'flex';
+        if (target === 'pay-yape') activeMethod = 'Yape';
+        if (target === 'pay-transfer') activeMethod = 'Transferencia';
+      }
     });
   });
 
@@ -655,6 +668,11 @@ checkoutView.init = function() {
           attrs: { class: 'lucide-icon' }
         });
       }
+
+      // If card tab is active and form is valid, re-trigger Izipay token generation to update price
+      if (activeMethod === 'Tarjeta' && validarFormularioEnvio()) {
+        inicializarIzipay();
+      }
     };
 
     districtSelect.addEventListener('change', updateCheckoutTotals);
@@ -666,6 +684,232 @@ checkoutView.init = function() {
     updateCheckoutTotals();
   }
 
+  // Helper functions for Izipay verification and loading
+  function validarFormularioEnvio() {
+    const shippingForm = document.getElementById('shipping-form');
+    if (!shippingForm) return false;
+    return shippingForm.checkValidity();
+  }
+
+  function verificarHabilitacionPago() {
+    const isFormValid = validarFormularioEnvio();
+    if (isFormValid) {
+      if (!isIzipayInitialized) {
+        inicializarIzipay();
+      }
+    } else {
+      const izipayLoading = document.getElementById('izipay-loading');
+      const izipayForm = document.getElementById('izipay-payment-form');
+      if (izipayLoading && izipayForm) {
+        izipayLoading.style.display = 'block';
+        izipayLoading.innerHTML = `
+          <div style="padding: 1.5rem; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color);">
+            <i data-lucide="lock" style="width: 24px; height: 24px; margin: 0 auto 0.5rem auto; color: var(--text-muted);"></i>
+            <p class="text-muted text-sm">${language === 'es' ? 'Completa los datos de envío (Paso 1) para habilitar el pago seguro con tarjeta.' : 'Preencha os dados de envio (Passo 1) para habilitar o pagamento seguro com cartão.'}</p>
+          </div>
+        `;
+        izipayForm.style.display = 'none';
+        isIzipayInitialized = false;
+        if (window.lucide) {
+          window.lucide.createIcons({ attrs: { class: 'lucide-icon' } });
+        }
+      }
+    }
+  }
+
+  async function inicializarIzipay() {
+    const izipayLoading = document.getElementById('izipay-loading');
+    const izipayForm = document.getElementById('izipay-payment-form');
+    if (!izipayLoading || !izipayForm) return;
+
+    izipayLoading.style.display = 'block';
+    izipayLoading.innerHTML = `
+      <div class="flex flex-col align-center justify-center" style="padding: 1rem;">
+        <div class="payment-spinner" style="margin-bottom: 0.5rem;"></div>
+        <p class="text-sm text-muted">${language === 'es' ? 'Generando pasarela de pago segura...' : 'Gerando pasarela de pagamento segura...'}</p>
+      </div>
+    `;
+    izipayForm.style.display = 'none';
+
+    try {
+      const selectedDistrict = districtSelect.value;
+      const isProvince = selectedDistrict === 'Provincia (Shalom)' || selectedDistrict === 'Provincias (Shalom - Pago en destino)';
+      const dep = isProvince ? document.getElementById('shipping-department')?.value : '';
+      const prov = isProvince ? document.getElementById('shipping-province')?.value : '';
+      const districtProv = isProvince ? document.getElementById('shipping-district-prov')?.value : '';
+      const isHome = isProvince && document.getElementById('shalom-delivery-type-home')?.checked;
+      const weightRate = isProvince ? Number(document.getElementById('shipping-weight-rate')?.value || 0) : 0;
+      
+      const email = document.getElementById('shipping-email')?.value || currentUser?.email || 'cliente@example.com';
+      
+      let couponCode = '';
+      if (sessionStorage.getItem('bf_coupon_discount')) {
+        try {
+          const config = await firebaseService.fetchGeneralConfig();
+          couponCode = config?.coupon?.code || '';
+        } catch (e) {
+          console.error("Error fetching general config for coupon:", e);
+        }
+      }
+
+      const items = AppStore.getCartItems().map(item => ({
+        productId: item.productId,
+        quantity: item.quantity
+      }));
+
+      const shippingInfo = {
+        district: selectedDistrict,
+        isHomeDelivery: isHome,
+        manualProvinceRate: weightRate
+      };
+
+      const response = await fetch('/api/obtener-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items,
+          shippingInfo,
+          couponCode,
+          email
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Error al obtener token de pago.");
+      }
+
+      const data = await response.json();
+
+      if (data.formToken) {
+        izipayLoading.style.display = 'none';
+        izipayForm.style.display = 'block';
+
+        if (window.KR) {
+          await KR.setFormConfig({
+            formToken: data.formToken,
+            "kr-language": "es-ES"
+          });
+          isIzipayInitialized = true;
+        } else {
+          console.error("KR SDK not found on window.");
+        }
+      } else {
+        throw new Error("No token received from backend.");
+      }
+    } catch (err) {
+      console.error("Error initializing Izipay:", err);
+      izipayLoading.innerHTML = `
+        <p class="text-danger text-sm">${language === 'es' 
+          ? 'Error al iniciar pasarela de pagos. Por favor revisa los campos de envío o intenta de nuevo.' 
+          : 'Erro ao iniciar pasarela de pagamento. Por favor verifique os campos de envio ou tente novamente.'}</p>
+      `;
+    }
+  }
+
+  // Listen to input changes in the shipping form to automatically enable payment
+  const shippingForm = document.getElementById('shipping-form');
+  if (shippingForm) {
+    const fields = shippingForm.querySelectorAll('input, select');
+    fields.forEach(field => {
+      field.addEventListener('input', verificarHabilitacionPago);
+      field.addEventListener('change', verificarHabilitacionPago);
+    });
+  }
+
+  // Register Izipay success callback (KR.onSubmit)
+  if (window.KR) {
+    KR.onSubmit(async function(event) {
+      if (event.clientAnswer.orderStatus === "PAID") {
+        loadingScreen.classList.add('active');
+
+        try {
+          const selectedDistrict = document.getElementById('shipping-district').value;
+          const isProvince = selectedDistrict === 'Provincia (Shalom)' || selectedDistrict === 'Provincias (Shalom - Pago en destino)';
+          const dep = isProvince ? document.getElementById('shipping-department').value.trim() : '';
+          const prov = isProvince ? document.getElementById('shipping-province').value.trim() : '';
+          const districtProv = isProvince ? document.getElementById('shipping-district-prov').value.trim() : '';
+          const isHome = isProvince && document.getElementById('shalom-delivery-type-home').checked;
+          const agencyName = (isProvince && !isHome) ? document.getElementById('shipping-agency-name').value.trim() : '';
+          const weightRate = isProvince ? Number(document.getElementById('shipping-weight-rate').value) : 0;
+          let fullAddress = '';
+          let shalomHomeAddress = '';
+          if (isProvince) {
+            if (isHome) {
+              shalomHomeAddress = document.getElementById('shipping-shalom-home-address').value.trim();
+              fullAddress = `${shalomHomeAddress}, ${districtProv}, ${prov}, ${dep} (Shalom - A domicilio)`;
+            } else {
+              fullAddress = `Agencia Shalom: ${agencyName}, ${districtProv}, ${prov}, ${dep}`;
+            }
+          } else {
+            fullAddress = document.getElementById('shipping-address').value.trim();
+          }
+
+          const shippingInfo = {
+            name: document.getElementById('shipping-name').value,
+            email: document.getElementById('shipping-email').value,
+            phone: document.getElementById('shipping-phone').value,
+            address: fullAddress + ', ' + selectedDistrict,
+            notes: document.getElementById('shipping-notes').value,
+            deliveryDate: document.getElementById('shipping-date').value || 'Por definir (Shalom)',
+            timeSlot: document.getElementById('shipping-time-slot').value || 'Sujeto a Shalom',
+            district: selectedDistrict,
+            dni: document.getElementById('shipping-dni').value.trim(),
+            department: dep,
+            province: prov,
+            districtProv: districtProv,
+            isHomeDelivery: isHome,
+            agencyName: agencyName,
+            shalomHomeAddress: shalomHomeAddress,
+            manualProvinceRate: weightRate
+          };
+
+          // 1. Create order in Firestore as "pending"
+          const newOrder = await AppStore.placeOrder(shippingInfo, 'Tarjeta', null);
+          
+          if (newOrder) {
+            // 2. Call backend to verify payment and mark it as paid securely
+            const confirmResponse = await fetch('/api/confirmar-pago', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                clientAnswer: event.clientAnswer,
+                hash: event.hash,
+                orderDocId: newOrder.docId
+              })
+            });
+
+            const confirmData = await confirmResponse.json();
+
+            if (confirmData.success) {
+              // Mark as paid locally for receipt
+              newOrder.paymentStatus = 'paid';
+              
+              sessionStorage.removeItem('bf_coupon_discount');
+              loadingScreen.classList.remove('active');
+              renderSuccessScreen(newOrder);
+            } else {
+              throw new Error(confirmData.error || "No se pudo confirmar el pago.");
+            }
+          } else {
+            throw new Error("No se pudo registrar el pedido.");
+          }
+        } catch (err) {
+          console.error("Error confirming payment checkout:", err);
+          loadingScreen.classList.remove('active');
+          AppStore.showToast(language === 'es' ? "Error al procesar pago con tarjeta. Pedido incompleto." : "Erro ao confirmar pagamento.", "error");
+        }
+      } else {
+        AppStore.showToast(language === 'es' ? "El banco rechazó la transacción." : "Transação recusada.", "error");
+      }
+
+      return false; // Prevent default redirect
+    });
+  }
+
+  // Trigger initial validation check for prefilled data
+  verificarHabilitacionPago();
+
   // Sunday validation
   const dateInput = document.getElementById('shipping-date');
   if (dateInput) {
@@ -675,34 +919,6 @@ checkoutView.init = function() {
       if (dateObj.getDay() === 0) { // 0 is Sunday
         AppStore.showToast(AppStore.t('checkoutSundayError') || "No realizamos entregas los domingos. Por favor selecciona otro día.", "error");
         dateInput.value = '';
-      }
-    });
-  }
-
-  const cardNumber = document.getElementById('card-number');
-  const cardExpiry = document.getElementById('card-expiry');
-
-  if (cardNumber) {
-    cardNumber.addEventListener('input', (e) => {
-      let value = e.target.value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-      let formattedValue = '';
-      for (let i = 0; i < value.length; i++) {
-        if (i > 0 && i % 4 === 0) {
-          formattedValue += ' ';
-        }
-        formattedValue += value[i];
-      }
-      e.target.value = formattedValue;
-    });
-  }
-
-  if (cardExpiry) {
-    cardExpiry.addEventListener('input', (e) => {
-      let value = e.target.value.replace(/\//g, '').replace(/[^0-9]/gi, '');
-      if (value.length > 2) {
-        e.target.value = value.substring(0, 2) + '/' + value.substring(2, 4);
-      } else {
-        e.target.value = value;
       }
     });
   }
@@ -759,18 +975,6 @@ checkoutView.init = function() {
           voucherFile = file;
         } else {
           AppStore.showToast(AppStore.t('checkoutVoucherRequiredError') || "El comprobante de pago es obligatorio para finalizar la compra.", "error");
-          return;
-        }
-      } else if (activeMethod === 'Tarjeta') {
-        const cardNum = document.getElementById('card-number').value.trim();
-        const cardExp = document.getElementById('card-expiry').value.trim();
-        const cardCvv = document.getElementById('card-cvv').value.trim();
-        if (!cardNum || !cardExp || !cardCvv) {
-          AppStore.showToast(language === 'es' ? "Los datos de la tarjeta son obligatorios." : "Os dados do cartão são obrigatórios.", "error");
-          return;
-        }
-        if (cardNum.replace(/\s+/g, '').length < 13 || cardExp.length < 5 || cardCvv.length < 3) {
-          AppStore.showToast(language === 'es' ? "Por favor ingresa datos de tarjeta válidos." : "Por favor insira dados de cartão válidos.", "error");
           return;
         }
       }
