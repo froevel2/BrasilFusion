@@ -1114,13 +1114,18 @@ function renderOrdersTableRows(ordersList) {
             <span style="display:inline-flex; align-items:center; gap:4px;" class="text-muted"><i data-lucide="clock" style="width:12px; height:12px;"></i> ${slotStr}</span>
           </div>
         </td>
-        <td><span class="badge-status ${payClass}" style="cursor:default;">${payLabel}</span></td>
+        <td>
+          <span class="badge-status ${payClass}" style="cursor:default;">${payLabel}</span>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; font-weight:500;">
+            ${escapeHTML(o.paymentMethod || 'No especificado')}
+          </div>
+        </td>
         <td><span class="badge-status ${statusClass}">${escapeHTML(o.status)}</span></td>
         <td>
           <div class="flex gap-05 align-center" style="display: flex; gap: 0.5rem; align-items: center;">
-            ${!isPaid ? `<button class="btn btn-success btn-sm mark-paid-btn" data-id="${o.docId}" title="Marcar como Pagado" style="padding:0.25rem 0.5rem; font-size:0.75rem; background:var(--success-color); color:white; border:none; border-radius:var(--radius-sm); cursor:pointer;">Pagar</button>` : ''}
+            ${!isPaid ? `<button class="btn btn-success btn-sm mark-paid-btn" data-id="${o.docId}" title="Confirmar Pago Recibido" style="padding:0.25rem 0.5rem; font-size:0.75rem; background:var(--success-color); color:white; border:none; border-radius:var(--radius-sm); cursor:pointer;">Confirmar</button>` : ''}
             <select class="change-status-select" data-id="${o.docId}" style="padding:0.25rem 0.5rem; font-size:0.8rem; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
-              <option value="En preparación" ${o.status === 'En preparación' ? 'selected' : ''}>Preparar</option>
+              <option value="En preparación" ${o.status === 'En preparation' || o.status === 'En preparación' ? 'selected' : ''}>Preparar</option>
               <option value="En camino" ${o.status === 'En camino' ? 'selected' : ''}>Despachar</option>
               <option value="Entregado" ${o.status === 'Entregado' ? 'selected' : ''}>Entregado</option>
               <option value="Cancelado" ${o.status === 'Cancelado' ? 'selected' : ''}>Cancelar</option>
