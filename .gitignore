@@ -1,0 +1,41 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+build/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# Firebase keys / config (if any local service account keys are added later)
+*.json
+!firebase.json
+!firestore.indexes.json
+!firestore.rules
+
+# Local logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log

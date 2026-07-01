@@ -1,0 +1,33 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if the user is an administrator
+    // Note: We check custom claims or admin UIDs. Since we do admin UIDs in Firestore,
+    // we can allow admins to write to any path. But since Storage rules cannot directly
+    // read Firestore database documents (unless using experimental Firestore queries which are slow),
+    // we can allow read on products to anyone, and write to authenticated users.
+    // Let's allow write on products to authenticated users for simplicity, or keep it open for dev.
+    
+    // 1. Products folder (productos/) - Anyone can read/download, only admins can write/upload
+    match /productos/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && firestore.exists(/databases/(default)/documents/administradores/$(request.auth.uid));
+    }
+
+    // 2. Customers folder (clientes/{uid}/) - User can read/write their own files, admins can read/write all
+    match /clientes/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 3. Vouchers folder (comprobantes/) - Only admins can read, anyone can upload
+    match /comprobantes/{allPaths=**} {
+      allow read: if request.auth != null && firestore.exists(/databases/(default)/documents/administradores/$(request.auth.uid));
+      allow create: if request.resource.size < 8 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*|application/pdf');
+      allow update, delete: if false;
+    }
+  }
+}
