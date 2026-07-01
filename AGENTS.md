@@ -343,3 +343,33 @@ npx serve "C:\Users\user\Desktop\IA\Brazil Fusión" -l 55112
 - Servidor local iniciado correctamente en http://localhost:55112
 - Se requiere que el cliente habilite la autenticación anónima en su consola de Firebase Auth.
 - Para más soporte o suscripción en OpenCode.
+
+## Nota de Revision - 1 Julio 2026
+
+Se realizo una revision tecnica del proyecto considerando que sigue en desarrollo. No se modifico codigo funcional; se documento el estado actual y los riesgos antes de produccion.
+
+### Archivos nuevos/documentacion actualizada
+- `docs/revision_estado_2026-07-01.md`
+- `docs/prioridad_checkout_seguro_siguiente_sesion.md`
+
+### Verificacion realizada
+Se ejecuto `node --check` sobre:
+- `api/obtener-token.js`
+- `api/confirmar-pago.js`
+- `serve_dev.js`
+- `js/store.js`
+
+Resultado: sin errores de sintaxis.
+
+### Opinion resumida
+El proyecto esta en fase de preproduccion funcional: ya tiene catalogo, carrito, checkout, admin, Firebase, reglas de seguridad, comprobantes y endpoints iniciales para Izipay. No debe considerarse listo para pagos reales hasta cerrar el flujo de checkout seguro.
+
+### Prioridades para la siguiente sesion
+1. Aislar o eliminar el boton de pago simulado en `js/views/checkout.js`.
+2. Hacer obligatorias las variables de entorno de Izipay en produccion; no usar fallbacks sandbox silenciosos.
+3. Unificar orden, token y confirmacion para que el backend sea la fuente de verdad.
+4. No confirmar pagos usando un `orderDocId` arbitrario enviado por el cliente; asociar por `orderId` verificado de Izipay.
+5. Eliminar fallback `anonymous-client` en `js/store.js`.
+6. Completar sanitizacion XSS del buscador en `js/components/header.js`.
+7. Restringir CORS en funciones para produccion.
+8. Corregir mojibake del `README.md` cuando haya tiempo.
