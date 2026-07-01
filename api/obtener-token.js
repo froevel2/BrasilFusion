@@ -24,10 +24,13 @@ if (!admin.apps.length) {
   }
 
   try {
-    admin.initializeApp({
-      credential,
+    const adminConfig = {
       projectId: "brasilfusion-10ef2"
-    });
+    };
+    if (credential) {
+      adminConfig.credential = credential;
+    }
+    admin.initializeApp(adminConfig);
   } catch (err) {
     console.error("Firebase Admin initialization error:", err);
   }
@@ -196,7 +199,7 @@ export default async function handler(req, res) {
     const SHOP_ID = process.env.IZIPAY_SHOP_ID || "80126588";
     const PASSWORD = process.env.IZIPAY_PASSWORD || "testpassword_LhIu6rZ8c0Y1v86XU678FhD786Xy6Z";
 
-    const url = "https://api.micuentaweb.pe/api-payment/v4/Charge/CreatePayment";
+    const url = "https://api.micuentaweb.pe/api-payment/V4/Charge/CreatePayment";
     const authHeader = 'Basic ' + Buffer.from(`${SHOP_ID}:${PASSWORD}`).toString('base64');
 
     const response = await fetch(url, {
@@ -213,7 +216,14 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error(`Failed to parse Izipay response as JSON. Status: ${response.status}, URL: ${url}, Body: ${responseText}`);
+      return res.status(500).json({ error: `La pasarela de pagos devolvió una respuesta inválida (HTTP ${response.status}).` });
+    }
 
     if (data.status === "SUCCESS") {
       return res.status(200).json({ 

@@ -25,10 +25,13 @@ if (!admin.apps.length) {
   }
 
   try {
-    admin.initializeApp({
-      credential,
+    const adminConfig = {
       projectId: "brasilfusion-10ef2"
-    });
+    };
+    if (credential) {
+      adminConfig.credential = credential;
+    }
+    admin.initializeApp(adminConfig);
   } catch (err) {
     console.error("Firebase Admin initialization error:", err);
   }
