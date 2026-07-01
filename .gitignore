@@ -39,3 +39,6 @@ yarn-debug.log*
 yarn-error.log*
 logs/
 *.log
+
+# Local dev server utility
+serve_dev.js
